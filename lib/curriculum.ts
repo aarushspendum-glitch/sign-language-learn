@@ -18,6 +18,7 @@ export interface Sign {
 
 export interface Module {
   id: string;
+  accent: "emerald" | "sky" | "amber" | "violet" | "coral";
   title: string;
   description: string;
   level: "beginner" | "intermediate" | "advanced";
@@ -33,6 +34,7 @@ export const MODULES: Module[] = [
     description: "Learn all 26 letters of the American Sign Language alphabet",
     level: "beginner",
     order: 1,
+    accent: "emerald",
     thumbnail: "🤟",
     lessons: [
       {
@@ -244,6 +246,7 @@ export const MODULES: Module[] = [
     description: "Count from zero to twenty in American Sign Language",
     level: "beginner",
     order: 2,
+    accent: "sky",
     thumbnail: "🔢",
     lessons: [
       {
@@ -283,6 +286,7 @@ export const MODULES: Module[] = [
     description: "Learn how to say hello, goodbye, and introduce yourself",
     level: "beginner",
     order: 3,
+    accent: "amber",
     thumbnail: "👋",
     lessons: [
       {
@@ -353,6 +357,7 @@ export const MODULES: Module[] = [
     description: "Essential words for day-to-day conversations",
     level: "intermediate",
     order: 4,
+    accent: "violet",
     thumbnail: "💬",
     lessons: [
       {
@@ -435,6 +440,7 @@ export const MODULES: Module[] = [
     description: "Put it all together with useful conversational phrases",
     level: "advanced",
     order: 5,
+    accent: "coral",
     thumbnail: "🗣️",
     lessons: [
       {

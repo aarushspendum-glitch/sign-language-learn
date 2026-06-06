@@ -1,99 +1,97 @@
 "use client";
-
 import { useParams } from "next/navigation";
 import { getModule } from "@/lib/curriculum";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { motion } from "framer-motion";
 
-interface ProgressEntry { lessonId: string; completed: boolean; score: number | null; }
+interface P { lessonId: string; completed: boolean; score: number | null; }
+
+const HUE: Record<string, { fg: string; bg: string }> = {
+  emerald: { fg: "var(--mod-emerald)", bg: "var(--mod-emerald-bg)" },
+  sky:     { fg: "var(--mod-sky)",     bg: "var(--mod-sky-bg)" },
+  amber:   { fg: "var(--mod-amber)",   bg: "var(--mod-amber-bg)" },
+  violet:  { fg: "var(--mod-violet)",  bg: "var(--mod-violet-bg)" },
+  coral:   { fg: "var(--mod-coral)",   bg: "var(--mod-coral-bg)" },
+};
 
 export default function ModulePage() {
   const { moduleId } = useParams() as { moduleId: string };
   const mod = getModule(moduleId);
   const { data: session } = useSession();
-  const [progress, setProgress] = useState<ProgressEntry[]>([]);
+  const [progress, setProgress] = useState<P[]>([]);
 
   useEffect(() => {
     if (!session) return;
-    fetch("/api/progress")
-      .then((r) => r.json())
-      .then((all: any[]) => setProgress(all.filter((p) => p.moduleId === moduleId)));
+    fetch("/api/progress").then(r => r.json()).then((all: any[]) => setProgress(all.filter(p => p.moduleId === moduleId)));
   }, [session, moduleId]);
 
   if (!mod) return (
-    <div className="min-h-[80vh] flex flex-col items-center justify-center">
-      <h1 className="text-2xl font-bold mb-4">Module not found</h1>
-      <Link href="/learn" className="text-teal-600">← Back to modules</Link>
+    <div style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+      <h1 style={{ fontFamily: "var(--font-display)", marginBottom: "16px" }}>Module not found</h1>
+      <Link href="/learn" style={{ color: "var(--accent-text)" }}>← Back to modules</Link>
     </div>
   );
 
-  const lp = (id: string) => progress.find((p) => p.lessonId === id);
-  const doneCount = progress.filter((p) => p.completed).length;
+  const hue = HUE[mod.accent] ?? HUE.emerald;
+  const lp = (id: string) => progress.find(p => p.lessonId === id);
+  const doneCount = progress.filter(p => p.completed).length;
   const pct = Math.round((doneCount / mod.lessons.length) * 100);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-12">
-      <Link href="/learn" className="inline-flex items-center gap-1 text-slate-400 hover:text-teal-600 text-sm mb-8 transition-colors">
-        ← All Modules
+    <div style={{ maxWidth: "var(--container-narrow)", margin: "0 auto", padding: "48px 16px" }}>
+      <Link href="/learn" style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", display: "inline-block", marginBottom: "24px", textDecoration: "none" }}>
+        ← Back to modules
       </Link>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-16 h-16 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-4xl">
-            {mod.thumbnail}
-          </div>
+      <div className="sl-rise" style={{ marginBottom: "40px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
+          <span style={{ width: "64px", height: "64px", borderRadius: "var(--radius-lg)", background: hue.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "36px", flexShrink: 0 }}>{mod.thumbnail}</span>
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900">{mod.title}</h1>
-            <p className="text-slate-400 text-sm capitalize">{mod.level} · {mod.lessons.length} lessons</p>
+            <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", fontWeight: "var(--fw-extrabold)", color: "var(--text-primary)", margin: 0 }}>{mod.title}</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", margin: "2px 0 0", textTransform: "capitalize" }}>{mod.level} · {mod.lessons.length} lessons</p>
           </div>
         </div>
-        <p className="text-slate-500 mb-4">{mod.description}</p>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-teal-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+        <p style={{ color: "var(--text-muted)", marginBottom: "16px" }}>{mod.description}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div style={{ flex: 1, height: "8px", background: "var(--surface-track)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: hue.fg, borderRadius: "var(--radius-pill)", transition: "width var(--dur-slow) var(--ease-out)" }} />
           </div>
-          <span className="text-sm font-semibold text-slate-500">{doneCount}/{mod.lessons.length} done</span>
+          <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: "var(--fw-semibold)", whiteSpace: "nowrap" }}>{doneCount}/{mod.lessons.length} done</span>
         </div>
-      </motion.div>
+      </div>
 
-      <div className="flex flex-col gap-3">
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {mod.lessons.map((lesson, i) => {
           const p = lp(lesson.id);
           const done = p?.completed;
           return (
-            <motion.div
-              key={lesson.id}
-              initial={{ opacity: 0, x: -16 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 flex items-center justify-between gap-4"
-            >
-              <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                  done ? "bg-teal-100 text-teal-600" : "bg-slate-100 text-slate-500"
-                }`}>
+            <div key={lesson.id} className="sl-rise" style={{ animationDelay: `${i*0.06}s`, background: "var(--surface-card)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", padding: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", boxShadow: "var(--shadow-sm)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "var(--radius-pill)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "var(--text-sm)", fontWeight: "var(--fw-bold)", flexShrink: 0, background: done ? "var(--accent)" : "var(--surface-track)", color: done ? "var(--white)" : "var(--text-secondary)" }}>
                   {done ? "✓" : i + 1}
                 </div>
                 <div>
-                  <h3 className="font-semibold text-slate-800">{lesson.title}</h3>
-                  <p className="text-slate-400 text-xs">
-                    {lesson.signs.length} signs{p?.score != null && ` · Last score: ${p.score}%`}
+                  <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontWeight: "var(--fw-semibold)", color: "var(--text-primary)" }}>{lesson.title}</h3>
+                  <p style={{ margin: "2px 0 0", color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>
+                    {lesson.signs.length} signs{p?.score != null ? ` · Last: ${p.score}%` : ""}
                   </p>
                 </div>
               </div>
               <Link
                 href={`/learn/${moduleId}/${lesson.id}`}
-                className={`text-sm font-semibold px-5 py-2 rounded-xl transition-colors whitespace-nowrap ${
-                  done
-                    ? "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                    : "bg-teal-500 hover:bg-teal-400 text-white shadow-sm shadow-teal-100"
-                }`}
+                style={{
+                  fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "var(--text-sm)",
+                  padding: "8px 18px", borderRadius: "var(--radius-pill)", textDecoration: "none", whiteSpace: "nowrap",
+                  background: done ? "var(--surface-inset)" : "var(--accent)",
+                  color: done ? "var(--text-secondary)" : "var(--text-on-accent)",
+                  border: done ? "1px solid var(--border-default)" : "none",
+                  boxShadow: done ? "none" : "var(--shadow-accent)",
+                }}
               >
                 {done ? "Review" : "Start"}
               </Link>
-            </motion.div>
+            </div>
           );
         })}
       </div>

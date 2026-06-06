@@ -1,106 +1,113 @@
 "use client";
-
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { MODULES } from "@/lib/curriculum";
 
-interface ProgressEntry { moduleId: string; lessonId: string; completed: boolean; score: number | null; }
-interface DiagnosticResult { score: number; level: string; moduleStart: string; }
+interface P { moduleId: string; lessonId: string; completed: boolean; score: number | null; }
+interface DR { score: number; level: string; moduleStart: string; }
+
+const HUE: Record<string, { fg: string; bg: string }> = {
+  emerald: { fg: "var(--mod-emerald)", bg: "var(--mod-emerald-bg)" },
+  sky:     { fg: "var(--mod-sky)",     bg: "var(--mod-sky-bg)" },
+  amber:   { fg: "var(--mod-amber)",   bg: "var(--mod-amber-bg)" },
+  violet:  { fg: "var(--mod-violet)",  bg: "var(--mod-violet-bg)" },
+  coral:   { fg: "var(--mod-coral)",   bg: "var(--mod-coral-bg)" },
+};
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
-  const [progress, setProgress] = useState<ProgressEntry[]>([]);
-  const [diagnostic, setDiagnostic] = useState<DiagnosticResult | null>(null);
+  const [progress, setProgress] = useState<P[]>([]);
+  const [diag, setDiag] = useState<DR | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!session) return;
-    Promise.all([
-      fetch("/api/progress").then((r) => r.json()),
-      fetch("/api/diagnostic").then((r) => r.json()),
-    ]).then(([prog, diag]) => { setProgress(prog); setDiagnostic(diag); setLoading(false); });
+    Promise.all([fetch("/api/progress").then(r=>r.json()), fetch("/api/diagnostic").then(r=>r.json())])
+      .then(([p,d]) => { setProgress(p); setDiag(d); setLoading(false); });
   }, [session]);
 
   if (status === "loading") return <Skeleton />;
-
   if (!session) return (
-    <div className="min-h-[80vh] flex flex-col items-center justify-center gap-4">
-      <h1 className="text-2xl font-bold">Sign in to view your dashboard</h1>
-      <button onClick={() => signIn("google")} className="bg-teal-500 text-white font-semibold px-6 py-3 rounded-xl">Sign in with Google</button>
+    <div style={{ minHeight: "80vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+      <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", color: "var(--text-primary)" }}>Sign in to view your dashboard</h1>
+      <button onClick={() => signIn("google")} style={{ fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", background: "var(--accent)", color: "var(--white)", padding: "12px 28px", borderRadius: "var(--radius-pill)", border: "none", cursor: "pointer", boxShadow: "var(--shadow-accent)" }}>
+        Sign in with Google
+      </button>
     </div>
   );
 
-  const doneIn = (moduleId: string) => progress.filter((p) => p.moduleId === moduleId && p.completed).length;
-  const totalDone = progress.filter((p) => p.completed).length;
-  const totalLessons = MODULES.reduce((a, m) => a + m.lessons.length, 0);
-  const overallPct = Math.round((totalDone / totalLessons) * 100);
+  const doneIn = (id: string) => progress.filter(p => p.moduleId === id && p.completed).length;
+  const totalDone = progress.filter(p => p.completed).length;
+  const totalLessons = MODULES.reduce((a,m) => a+m.lessons.length, 0);
+  const overall = Math.round((totalDone/totalLessons)*100);
+  const started = MODULES.filter(m => doneIn(m.id) > 0).length;
+
+  const STATS = [
+    { value: totalDone, label: "Lessons Done", accent: true },
+    { value: `${overall}%`, label: "Overall Progress", accent: true },
+    { value: started, label: "Modules Started", accent: true },
+    { value: diag ? `${diag.score}%` : "—", label: "Diagnostic Score", accent: !!diag },
+  ];
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
+    <div style={{ maxWidth: "var(--container-base)", margin: "0 auto", padding: "48px 16px" }}>
       {/* Profile */}
-      <div className="flex items-center gap-4 mb-10">
-        <img src={session.user?.image ?? ""} alt="avatar" className="w-16 h-16 rounded-2xl border-2 border-teal-200 shadow-sm" />
+      <div className="sl-rise" style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "40px" }}>
+        {session.user?.image && <img src={session.user.image} alt="" style={{ width: "64px", height: "64px", borderRadius: "var(--radius-pill)", border: "2px solid var(--accent)", objectFit: "cover" }} />}
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">{session.user?.name}</h1>
-          <p className="text-slate-400 text-sm">{session.user?.email}</p>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", fontWeight: "var(--fw-bold)", color: "var(--text-primary)", margin: 0 }}>{session.user?.name}</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", margin: "2px 0 0" }}>{session.user?.email}</p>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-        {[
-          { label: "Lessons Done", value: totalDone, color: "text-teal-600", bg: "bg-teal-50" },
-          { label: "Overall Progress", value: `${overallPct}%`, color: "text-indigo-600", bg: "bg-indigo-50" },
-          { label: "Modules Started", value: MODULES.filter((m) => doneIn(m.id) > 0).length, color: "text-amber-600", bg: "bg-amber-50" },
-          { label: "Diagnostic Score", value: diagnostic ? `${diagnostic.score}%` : "—", color: "text-rose-600", bg: "bg-rose-50" },
-        ].map((s, i) => (
-          <motion.div key={s.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}
-            className="bg-white rounded-2xl border border-slate-100 shadow-card p-5 text-center">
-            <p className={`text-3xl font-extrabold ${s.color}`}>{s.value}</p>
-            <p className="text-slate-400 text-xs mt-1">{s.label}</p>
-          </motion.div>
+      {/* Stat tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "16px", marginBottom: "40px" }}>
+        {STATS.map((s, i) => (
+          <div key={s.label} className="sl-rise" style={{ animationDelay: `${i*0.07}s`, background: "var(--surface-card)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", padding: "20px", textAlign: "center", boxShadow: "var(--shadow-sm)" }}>
+            <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", fontWeight: "var(--fw-black)", color: s.accent ? "var(--accent-text)" : "var(--text-primary)", margin: 0, lineHeight: 1.1 }}>{s.value}</p>
+            <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", margin: "4px 0 0" }}>{s.label}</p>
+          </div>
         ))}
       </div>
 
       {/* Diagnostic CTA */}
-      {!diagnostic && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-8 flex items-center justify-between gap-4">
+      {!diag && (
+        <div style={{ background: "var(--warn-soft)", border: "1px solid var(--amber-100)", borderRadius: "var(--radius-lg)", padding: "20px", marginBottom: "32px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
           <div>
-            <p className="font-semibold text-amber-800">Haven't taken the diagnostic yet?</p>
-            <p className="text-amber-600 text-sm">Find your level and jump to the right module.</p>
+            <p style={{ margin: 0, fontWeight: "var(--fw-semibold)", color: "var(--warn-text)", fontFamily: "var(--font-sans)" }}>Haven't taken the diagnostic yet?</p>
+            <p style={{ margin: "2px 0 0", color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>Find your level and jump to the right module.</p>
           </div>
-          <Link href="/diagnostic" className="bg-amber-400 hover:bg-amber-300 text-amber-900 font-bold px-5 py-2.5 rounded-xl text-sm whitespace-nowrap transition-colors">
+          <Link href="/diagnostic" style={{ fontFamily: "var(--font-display)", fontWeight: "var(--fw-bold)", fontSize: "var(--text-sm)", color: "var(--slate-900)", background: "var(--warn)", padding: "10px 20px", borderRadius: "var(--radius-md)", textDecoration: "none", whiteSpace: "nowrap" }}>
             Take Diagnostic →
           </Link>
         </div>
       )}
 
-      {/* Modules */}
-      <h2 className="text-xl font-bold text-slate-800 mb-5">Module Progress</h2>
+      {/* Module grid */}
+      <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", fontWeight: "var(--fw-bold)", color: "var(--text-primary)", margin: "0 0 20px" }}>Module Progress</h2>
       {loading ? <Skeleton /> : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: "24px" }}>
           {MODULES.map((mod, i) => {
             const done = doneIn(mod.id);
-            const pct = Math.round((done / mod.lessons.length) * 100);
+            const pct = Math.round((done/mod.lessons.length)*100);
+            const hue = HUE[mod.accent] ?? HUE.emerald;
             return (
-              <motion.div key={mod.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                className="bg-white rounded-2xl border border-slate-100 shadow-card p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="text-3xl">{mod.thumbnail}</span>
+              <div key={mod.id} className="sl-rise" style={{ animationDelay: `${i*0.05}s`, background: "var(--surface-card)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", padding: "20px", boxShadow: "var(--shadow-sm)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+                  <span style={{ fontSize: "28px" }}>{mod.thumbnail}</span>
                   <div>
-                    <h3 className="font-semibold text-slate-800">{mod.title}</h3>
-                    <p className="text-xs text-slate-400">{done}/{mod.lessons.length} lessons</p>
+                    <h3 style={{ fontFamily: "var(--font-display)", fontWeight: "var(--fw-semibold)", color: "var(--text-primary)", margin: 0 }}>{mod.title}</h3>
+                    <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", margin: "2px 0 0" }}>{done}/{mod.lessons.length} lessons</p>
                   </div>
                 </div>
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
-                  <div className="h-full bg-teal-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                <div style={{ height: "6px", background: "var(--surface-track)", borderRadius: "var(--radius-pill)", overflow: "hidden", marginBottom: "12px" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: hue.fg, borderRadius: "var(--radius-pill)", transition: "width var(--dur-slow) var(--ease-out)" }} />
                 </div>
-                <Link href={`/learn/${mod.id}`} className="text-teal-600 hover:text-teal-500 text-sm font-semibold transition-colors">
+                <Link href={`/learn/${mod.id}`} style={{ color: "var(--accent-text)", fontSize: "var(--text-sm)", fontWeight: "var(--fw-semibold)", textDecoration: "none" }}>
                   {pct === 0 ? "Start →" : pct === 100 ? "Review →" : "Continue →"}
                 </Link>
-              </motion.div>
+              </div>
             );
           })}
         </div>
@@ -111,10 +118,8 @@ export default function DashboardPage() {
 
 function Skeleton() {
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12 animate-pulse">
-      <div className="h-16 w-64 bg-slate-200 rounded-2xl mb-10" />
-      <div className="grid grid-cols-4 gap-4 mb-10">{[1,2,3,4].map(i => <div key={i} className="h-24 bg-slate-200 rounded-2xl" />)}</div>
-      <div className="grid sm:grid-cols-3 gap-5">{[1,2,3].map(i => <div key={i} className="h-32 bg-slate-200 rounded-2xl" />)}</div>
+    <div style={{ maxWidth: "var(--container-base)", margin: "0 auto", padding: "48px 16px" }}>
+      {[1,2,3].map(i => <div key={i} style={{ height: "80px", background: "var(--surface-inset)", borderRadius: "var(--radius-lg)", marginBottom: "16px" }} />)}
     </div>
   );
 }

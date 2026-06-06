@@ -1,11 +1,9 @@
 "use client";
-
 import { useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { getDiagnosticSigns, getStartingModule } from "@/lib/curriculum";
 import type { Sign } from "@/lib/curriculum";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 
 const SignDetector = dynamic(() => import("@/components/SignDetector"), { ssr: false });
@@ -21,15 +19,11 @@ export default function DiagnosticPage() {
   const total = SIGNS.length;
 
   const finish = useCallback(async (c: number) => {
-    const score = Math.round((c / total) * 100);
+    const score = Math.round((c/total)*100);
     const moduleStart = getStartingModule(score);
     const level = score >= 80 ? "intermediate" : score >= 40 ? "beginner-advanced" : "beginner";
     if (session) {
-      const res = await fetch("/api/diagnostic", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ score: c, total }),
-      });
+      const res = await fetch("/api/diagnostic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ score: c, total }) });
       setResult(await res.json());
     } else {
       setResult({ score, level, moduleStart });
@@ -38,97 +32,96 @@ export default function DiagnosticPage() {
   }, [session, total]);
 
   const handleSuccess = useCallback(async () => {
-    const next = correct + 1;
-    setCorrect(next);
+    const next = correct + 1; setCorrect(next);
     if (idx + 1 >= total) await finish(next);
-    else setTimeout(() => setIdx(i => i + 1), 500);
+    else setTimeout(() => setIdx(i => i+1), 500);
   }, [correct, idx, total, finish]);
 
   const skip = async () => {
     if (idx + 1 >= total) await finish(correct);
-    else setIdx(i => i + 1);
+    else setIdx(i => i+1);
   };
 
   const sign = SIGNS[idx];
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-12">
-      <AnimatePresence mode="wait">
-        {phase === "intro" && (
-          <motion.div key="intro" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-center">
-            <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-teal-400 to-indigo-400 flex items-center justify-center text-4xl mx-auto mb-6 shadow-lg shadow-teal-100">
-              🎯
-            </div>
-            <h1 className="text-4xl font-extrabold text-slate-900 mb-4">Diagnostic Test</h1>
-            <p className="text-slate-500 text-lg mb-8 leading-relaxed">
-              Show us {total} signs on camera. We'll figure out where you are and place you at the right level. No pressure!
-            </p>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 text-left mb-8">
-              <p className="font-semibold text-slate-700 mb-3">Signs in this test:</p>
-              <div className="flex flex-wrap gap-2">
-                {SIGNS.map((s) => (
-                  <span key={s.id} className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-sm font-medium">{s.label}</span>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button onClick={() => setPhase("test")} className="bg-teal-500 hover:bg-teal-400 text-white font-bold px-8 py-4 rounded-2xl text-lg shadow-lg shadow-teal-100 transition-all">
-                Start Test →
-              </button>
-              <Link href="/learn" className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold px-8 py-4 rounded-2xl text-lg text-center transition-all">
-                Skip — Start from Beginning
-              </Link>
-            </div>
-          </motion.div>
-        )}
+    <div style={{ maxWidth: "var(--container-narrow)", margin: "0 auto", padding: "48px 16px" }}>
 
-        {phase === "test" && (
-          <motion.div key={`test-${idx}`} initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col items-center gap-6">
-            <div className="w-full">
-              <div className="flex justify-between text-sm text-slate-400 mb-2">
-                <span className="font-medium">Question {idx + 1} of {total}</span>
-                <span className="text-teal-600 font-semibold">{correct} correct</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <motion.div className="h-full bg-gradient-to-r from-teal-400 to-indigo-400 rounded-full" animate={{ width: `${(idx / total) * 100}%` }} />
-              </div>
+      {/* INTRO */}
+      {phase === "intro" && (
+        <div className="sl-rise" style={{ textAlign: "center" }}>
+          <div style={{ width: "80px", height: "80px", borderRadius: "var(--radius-xl)", background: "var(--gradient-brand)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "40px", margin: "0 auto 24px", boxShadow: "var(--shadow-accent)" }}>🎯</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h1)", fontWeight: "var(--fw-extrabold)", color: "var(--text-primary)", margin: "0 0 16px" }}>Diagnostic Test</h1>
+          <p style={{ color: "var(--text-muted)", fontSize: "var(--text-lg)", maxWidth: "36rem", margin: "0 auto 32px", lineHeight: 1.6 }}>
+            Show us {total} signs on camera. We'll figure out where you are and place you at the right level — no pressure!
+          </p>
+          <div style={{ background: "var(--surface-card)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", padding: "24px", textAlign: "left", marginBottom: "32px", boxShadow: "var(--shadow-sm)" }}>
+            <p style={{ fontWeight: "var(--fw-semibold)", color: "var(--text-secondary)", marginBottom: "12px", fontSize: "var(--text-sm)" }}>Signs in this test:</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {SIGNS.map(s => (
+                <span key={s.id} style={{ background: "var(--surface-track)", color: "var(--text-secondary)", padding: "4px 12px", borderRadius: "var(--radius-pill)", fontSize: "var(--text-sm)", fontWeight: "var(--fw-medium)" }}>{s.label}</span>
+              ))}
             </div>
-
-            <div className="text-center">
-              <p className="text-slate-400 text-sm font-medium mb-1">Show this sign:</p>
-              <div className="text-7xl font-extrabold text-transparent bg-gradient-to-r from-teal-500 to-indigo-500 bg-clip-text mb-2">{sign.label}</div>
-              <p className="text-slate-500 text-sm">{sign.description}</p>
-            </div>
-
-            <SignDetector expectedSign={sign.id} onSuccess={handleSuccess} />
-
-            <button onClick={skip} className="text-slate-400 hover:text-slate-600 text-sm underline underline-offset-2 transition-colors">
-              Skip / Don't know this one
+          </div>
+          <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={() => setPhase("test")} style={{ fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "18px", color: "var(--text-on-accent)", background: "var(--accent)", padding: "15px 32px", borderRadius: "var(--radius-pill)", border: "none", cursor: "pointer", boxShadow: "var(--shadow-accent)" }}>
+              Start Test →
             </button>
-          </motion.div>
-        )}
-
-        {phase === "results" && result && (
-          <motion.div key="results" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
-            <div className="text-7xl mb-4">{result.score >= 70 ? "🌟" : result.score >= 40 ? "👍" : "🌱"}</div>
-            <h1 className="text-3xl font-extrabold text-slate-900 mb-2">Diagnostic Complete!</h1>
-            <p className="text-slate-500 mb-8">
-              You scored <span className="font-bold text-slate-800">{result.score}%</span> · Level:{" "}
-              <span className="font-bold text-teal-600 capitalize">{result.level}</span>
-            </p>
-
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-card p-6 mb-8">
-              <p className="text-slate-400 text-sm mb-2">We recommend starting at:</p>
-              <p className="text-2xl font-extrabold text-teal-600 capitalize">{result.moduleStart.replace("-", " ")} Module</p>
-              {!session && <p className="text-slate-400 text-xs mt-3">Sign in with Google to save this result.</p>}
-            </div>
-
-            <Link href={`/learn/${result.moduleStart}`} className="inline-block bg-teal-500 hover:bg-teal-400 text-white font-bold px-10 py-4 rounded-2xl text-lg transition-all shadow-lg shadow-teal-100">
-              Go to Recommended Module →
+            <Link href="/learn" style={{ fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "18px", color: "var(--text-primary)", background: "var(--white)", padding: "15px 32px", borderRadius: "var(--radius-pill)", border: "1px solid var(--border-strong)", textDecoration: "none", boxShadow: "var(--shadow-sm)" }}>
+              Skip — Start from Beginning
             </Link>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </div>
+      )}
+
+      {/* TEST */}
+      {phase === "test" && (
+        <div key={idx} className="sl-slide" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+          <div style={{ width: "100%" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-sm)", color: "var(--text-muted)", marginBottom: "8px", fontWeight: "var(--fw-medium)" }}>
+              <span>Question {idx+1} of {total}</span>
+              <span style={{ color: "var(--accent-text)", fontWeight: "var(--fw-bold)" }}>{correct} correct</span>
+            </div>
+            <div style={{ height: "6px", background: "var(--surface-track)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(idx/total)*100}%`, background: "var(--accent)", borderRadius: "var(--radius-pill)", transition: "width var(--dur-slow) var(--ease-out)" }} />
+            </div>
+          </div>
+
+          <div style={{ textAlign: "center" }}>
+            <p style={{ margin: 0, fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>Show this sign:</p>
+            <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-sign)", fontWeight: "var(--fw-black)", color: "var(--accent-text)", lineHeight: 0.95, margin: "4px 0 8px" }}>{sign.label}</h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: "var(--text-sm)", margin: 0 }}>{sign.description}</p>
+          </div>
+
+          <SignDetector expectedSign={sign.id} onSuccess={handleSuccess} />
+
+          <button onClick={skip} style={{ color: "var(--text-faint)", fontSize: "var(--text-sm)", textDecoration: "underline", textUnderlineOffset: "2px", background: "none", border: "none", cursor: "pointer" }}>
+            Skip / Don't know this one
+          </button>
+        </div>
+      )}
+
+      {/* RESULTS */}
+      {phase === "results" && result && (
+        <div className="sl-pop" style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "72px", marginBottom: "16px" }}>{result.score >= 70 ? "🌟" : result.score >= 40 ? "👍" : "🌱"}</div>
+          <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", fontWeight: "var(--fw-extrabold)", color: "var(--text-primary)", margin: "0 0 8px" }}>Diagnostic Complete!</h1>
+          <p style={{ color: "var(--text-muted)", margin: "0 0 32px" }}>
+            You scored <strong style={{ color: "var(--text-primary)" }}>{result.score}%</strong> · Level:{" "}
+            <strong style={{ color: "var(--accent-text)", textTransform: "capitalize" }}>{result.level}</strong>
+          </p>
+          <div style={{ background: "var(--surface-card)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", padding: "24px", marginBottom: "32px", boxShadow: "var(--shadow-sm)" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", margin: "0 0 8px" }}>We recommend starting at:</p>
+            <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", fontWeight: "var(--fw-extrabold)", color: "var(--accent-text)", margin: 0, textTransform: "capitalize" }}>
+              {result.moduleStart.replace("-", " ")} Module
+            </p>
+            {!session && <p style={{ color: "var(--text-faint)", fontSize: "var(--text-xs)", margin: "12px 0 0" }}>Sign in with Google to save this result.</p>}
+          </div>
+          <Link href={`/learn/${result.moduleStart}`} style={{ display: "inline-block", fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "18px", color: "var(--text-on-accent)", background: "var(--accent)", padding: "15px 36px", borderRadius: "var(--radius-pill)", textDecoration: "none", boxShadow: "var(--shadow-accent)" }}>
+            Go to Recommended Module →
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

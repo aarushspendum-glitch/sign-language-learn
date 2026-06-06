@@ -1,79 +1,97 @@
 "use client";
-
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { useState } from "react";
 import type { Module } from "@/lib/curriculum";
 
-interface Props {
-  module: Module;
-  completedLessons: number;
-  locked?: boolean;
-}
+interface Props { module: Module; completedLessons: number; locked?: boolean; }
 
-const levelBadge = {
-  beginner:     "bg-emerald-100 text-emerald-700",
-  intermediate: "bg-amber-100 text-amber-700",
-  advanced:     "bg-rose-100 text-rose-700",
+const HUE: Record<string, { fg: string; bg: string }> = {
+  emerald: { fg: "var(--mod-emerald)", bg: "var(--mod-emerald-bg)" },
+  sky:     { fg: "var(--mod-sky)",     bg: "var(--mod-sky-bg)" },
+  amber:   { fg: "var(--mod-amber)",   bg: "var(--mod-amber-bg)" },
+  violet:  { fg: "var(--mod-violet)",  bg: "var(--mod-violet-bg)" },
+  coral:   { fg: "var(--mod-coral)",   bg: "var(--mod-coral-bg)" },
 };
 
-const progressColor = {
-  beginner:     "bg-emerald-400",
-  intermediate: "bg-amber-400",
-  advanced:     "bg-rose-400",
+const LEVEL_TINT: Record<string, { color: string; background: string }> = {
+  beginner:     { color: "var(--level-beginner)",     background: "var(--level-beginner-bg)" },
+  intermediate: { color: "var(--level-intermediate)", background: "var(--level-intermediate-bg)" },
+  advanced:     { color: "var(--level-advanced)",     background: "var(--level-advanced-bg)" },
 };
 
-export default function ModuleCard({ module, completedLessons, locked = false }: Props) {
-  const total = module.lessons.length;
-  const pct = total > 0 ? Math.round((completedLessons / total) * 100) : 0;
+export default function ModuleCard({ module: mod, completedLessons, locked = false }: Props) {
+  const [hover, setHover] = useState(false);
+  const pct = mod.lessons.length > 0 ? Math.round((completedLessons / mod.lessons.length) * 100) : 0;
+  const hue = HUE[mod.accent] ?? HUE.emerald;
+  const level = LEVEL_TINT[mod.level];
+  const cta = pct === 0 ? "Start Module" : pct === 100 ? "Review Module" : "Continue";
 
   return (
-    <motion.div
-      whileHover={locked ? {} : { y: -4 }}
-      className={`bg-white rounded-2xl p-6 border border-slate-100 shadow-card flex flex-col gap-4 transition-all ${locked ? "opacity-50 cursor-not-allowed" : ""}`}
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: "relative",
+        display: "flex", flexDirection: "column", gap: "18px",
+        background: "var(--surface-card)",
+        border: `1px solid ${hover && !locked ? "var(--border-strong)" : "var(--border-default)"}`,
+        borderRadius: "var(--radius-lg)",
+        padding: "22px",
+        opacity: locked ? 0.55 : 1,
+        boxShadow: hover && !locked ? "var(--shadow-lg)" : "var(--shadow-sm)",
+        transform: hover && !locked ? "translateY(-3px)" : "none",
+        transition: "transform var(--dur-base) var(--ease-out), border-color var(--dur-base), box-shadow var(--dur-base)",
+        fontFamily: "var(--font-sans)",
+      }}
     >
+      {locked && <div style={{ position: "absolute", top: "18px", right: "18px", fontSize: "18px" }}>🔒</div>}
+
       {/* Header */}
-      <div className="flex items-start gap-4">
-        <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center text-3xl flex-shrink-0 border border-slate-100">
-          {module.thumbnail}
+      <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
+        <span style={{ flexShrink: 0, width: "52px", height: "52px", borderRadius: "var(--radius-md)", background: hue.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "28px" }}>
+          {mod.thumbnail}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "inline-block", fontSize: "var(--text-xs)", fontWeight: "var(--fw-bold)", padding: "3px 10px", borderRadius: "var(--radius-pill)", marginBottom: "8px", ...level }}>
+            {mod.level}
+          </span>
+          <h3 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", fontWeight: "var(--fw-extrabold)", color: "var(--text-primary)", lineHeight: 1.15 }}>
+            {mod.title}
+          </h3>
+          <p style={{ margin: "5px 0 0", fontSize: "var(--text-sm)", color: "var(--text-muted)", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+            {mod.description}
+          </p>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${levelBadge[module.level]}`}>
-              {module.level}
-            </span>
-            {pct === 100 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-700">✓ Done</span>}
-          </div>
-          <h3 className="font-bold text-slate-800 text-base leading-tight">{module.title}</h3>
-          <p className="text-slate-400 text-xs mt-0.5 line-clamp-2">{module.description}</p>
-        </div>
-        {locked && <span className="text-slate-300 text-xl">🔒</span>}
       </div>
 
       {/* Progress */}
       <div>
-        <div className="flex justify-between text-xs text-slate-400 mb-1.5">
-          <span>{completedLessons}/{total} lessons</span>
-          <span className="font-semibold text-slate-600">{pct}%</span>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "6px", fontWeight: "var(--fw-medium)" }}>
+          <span>{completedLessons} / {mod.lessons.length} lessons</span>
+          <span style={{ color: hue.fg, fontWeight: "var(--fw-bold)" }}>{pct}%</span>
         </div>
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${pct}%` }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className={`h-full rounded-full ${progressColor[module.level]}`}
-          />
+        <div style={{ height: "8px", background: "var(--surface-track)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: hue.fg, borderRadius: "var(--radius-pill)", transition: "width var(--dur-slow) var(--ease-out)" }} />
         </div>
       </div>
 
       {/* CTA */}
       {!locked && (
         <Link
-          href={`/learn/${module.id}`}
-          className="w-full text-center bg-slate-900 hover:bg-slate-700 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm"
+          href={`/learn/${mod.id}`}
+          style={{
+            display: "block", width: "100%", textAlign: "center",
+            fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)",
+            fontSize: "var(--text-sm)", color: "var(--text-on-accent)",
+            background: hover ? hue.fg : "var(--accent)",
+            padding: "11px", border: "none", borderRadius: "var(--radius-pill)",
+            cursor: "pointer", transition: "background var(--dur-fast)",
+            textDecoration: "none",
+          }}
         >
-          {pct === 0 ? "Start Module →" : pct === 100 ? "Review →" : "Continue →"}
+          {cta}
         </Link>
       )}
-    </motion.div>
+    </div>
   );
 }

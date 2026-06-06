@@ -1,42 +1,33 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { MODULES } from "@/lib/curriculum";
 import ModuleCard from "@/components/ModuleCard";
-import { motion } from "framer-motion";
 
-interface ProgressEntry { moduleId: string; lessonId: string; completed: boolean; }
+interface P { moduleId: string; lessonId: string; completed: boolean; }
 
 export default function LearnPage() {
   const { data: session } = useSession();
-  const [progress, setProgress] = useState<ProgressEntry[]>([]);
+  const [progress, setProgress] = useState<P[]>([]);
 
   useEffect(() => {
     if (!session) return;
-    fetch("/api/progress").then((r) => r.json()).then(setProgress);
+    fetch("/api/progress").then(r => r.json()).then(setProgress);
   }, [session]);
 
-  const completedIn = (moduleId: string) =>
-    progress.filter((p) => p.moduleId === moduleId && p.completed).length;
+  const doneIn = (id: string) => progress.filter(p => p.moduleId === id && p.completed).length;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
-        <h1 className="text-4xl font-extrabold text-slate-900 mb-2">All Modules</h1>
-        <p className="text-slate-500 text-lg">Work through each module in order, or jump to any level.</p>
-      </motion.div>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MODULES.sort((a, b) => a.order - b.order).map((mod, i) => (
-          <motion.div
-            key={mod.id}
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07 }}
-          >
-            <ModuleCard module={mod} completedLessons={completedIn(mod.id)} />
-          </motion.div>
+    <div style={{ maxWidth: "var(--container-base)", margin: "0 auto", padding: "48px 16px" }}>
+      <div className="sl-rise" style={{ marginBottom: "32px" }}>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h1)", fontWeight: "var(--fw-extrabold)", color: "var(--text-primary)", margin: "0 0 8px" }}>All Modules</h1>
+        <p style={{ color: "var(--text-muted)", fontSize: "var(--text-lg)" }}>Work through each module in order, or jump to any level.</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: "24px" }}>
+        {MODULES.sort((a,b) => a.order-b.order).map((mod, i) => (
+          <div key={mod.id} className="sl-rise" style={{ animationDelay: `${i*0.06}s` }}>
+            <ModuleCard module={mod} completedLessons={doneIn(mod.id)} />
+          </div>
         ))}
       </div>
     </div>
