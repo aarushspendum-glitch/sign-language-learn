@@ -196,41 +196,41 @@ export default function SignDetector({ expectedSign, onSuccess, onDetected, show
   const progressPct = Math.round((successStreak / REQUIRED_STREAK) * 100);
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="relative rounded-2xl overflow-hidden border-2 border-slate-700 shadow-xl bg-black">
+    <div className="flex flex-col items-center gap-4 w-full max-w-lg">
+      <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-card bg-slate-900 w-full">
         <video ref={videoRef} className="hidden" playsInline muted />
-        <canvas ref={canvasRef} width={640} height={480} className="w-full max-w-lg" />
+        <canvas ref={canvasRef} width={640} height={480} className="w-full" />
 
         {status === "loading" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80">
             <div className="text-center text-white">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-400 mx-auto mb-3" />
-              <p className="text-sm">Starting camera…</p>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-400 mx-auto mb-3" />
+              <p className="text-sm text-slate-300">Starting camera…</p>
             </div>
           </div>
         )}
 
         {status === "detected" && (
-          <div className="absolute top-3 right-3 bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+          <div className="absolute top-3 right-3 bg-teal-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow">
             ✓ {expectedSign}
           </div>
         )}
         {status === "wrong" && detectedSign && (
-          <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-            Detected: {detectedSign}
+          <div className="absolute top-3 right-3 bg-rose-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow">
+            Seeing: {detectedSign}
           </div>
         )}
       </div>
 
       {showFeedback && status !== "loading" && (
-        <div className="w-full max-w-lg">
-          <div className="flex justify-between text-xs text-slate-400 mb-1">
+        <div className="w-full">
+          <div className="flex justify-between text-xs text-slate-400 mb-1.5">
             <span>Hold the sign steady…</span>
-            <span>{progressPct}%</span>
+            <span className="font-semibold text-slate-600">{progressPct}%</span>
           </div>
-          <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+          <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
             <div
-              className="h-full bg-emerald-500 transition-all duration-100 rounded-full"
+              className="h-full bg-gradient-to-r from-teal-400 to-indigo-400 transition-all duration-100 rounded-full"
               style={{ width: `${progressPct}%` }}
             />
           </div>
