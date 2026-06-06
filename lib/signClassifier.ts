@@ -1,354 +1,354 @@
 "use client";
 
 /**
- * ASL Sign Classifier
- * Uses MediaPipe 21-point hand landmarks to classify static and motion signs.
+ * ASL Sign Classifier — landmark geometry based on MediaPipe Hands 21-pt model.
  *
- * Landmark map:
- *  0 = wrist
- *  1–4  = thumb  (MCP, IP, TIP)
- *  5–8  = index  (MCP, PIP, DIP, TIP)
- *  9–12 = middle (MCP, PIP, DIP, TIP)
- * 13–16 = ring   (MCP, PIP, DIP, TIP)
- * 17–20 = pinky  (MCP, PIP, DIP, TIP)
+ * Reference: Lifeprint.com (ASL University, Dr. Bill Vicars)
+ *            HandSpeak.com
+ *            MediaPipe Hands landmark map
+ *
+ * Landmark indices:
+ *  0=wrist | 1-4=thumb(CMC,MCP,IP,TIP) | 5-8=index(MCP,PIP,DIP,TIP)
+ *  9-12=middle(MCP,PIP,DIP,TIP) | 13-16=ring | 17-20=pinky
  */
 
 export interface Landmark { x: number; y: number; z: number; }
 export type Landmarks = Landmark[];
 
-// ── Geometry helpers ─────────────────────────────────────────────────────────
+// ─── Geometry primitives ─────────────────────────────────────────────────────
 
-function dist(a: Landmark, b: Landmark): number {
+function dist(a: Landmark, b: Landmark) {
   return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
 }
 
-/** True if finger tip is above its PIP joint (finger extended upward). */
-function extended(lms: Landmarks, tip: number, pip: number): boolean {
-  return lms[tip].y < lms[pip].y - 0.02;
+/** Palm width: index MCP → pinky MCP. Used for normalization. */
+function palmWidth(lms: Landmarks): number {
+  return Math.max(dist(lms[5], lms[17]), 0.01);
 }
 
 /**
- * True if thumb is abducted (spread away from palm).
- * Uses the angle between thumb tip and index MCP relative to the wrist.
- * Works for both left and right hands after mirroring.
+ * Finger is extended — tip is significantly higher (smaller y) than its PIP joint.
+ * Threshold raised to 0.35 for stricter detection (reduces false positives).
  */
-function thumbOut(lms: Landmarks): boolean {
-  // Thumb tip should be far from index MCP laterally
-  const thumbTip  = lms[4];
-  const indexMcp  = lms[5];
-  const wrist     = lms[0];
-  // Palm width reference
-  const palmWidth = dist(lms[5], lms[17]);
-  // Lateral distance of thumb tip from index MCP
-  const lateral   = Math.abs(thumbTip.x - indexMcp.x);
-  // Thumb is "out" if its tip is more than 40% of palm width away laterally
-  return lateral > palmWidth * 0.40;
-}
-
-/** True if thumb tip is CURLED (over the fingers). */
-function thumbCurled(lms: Landmarks): boolean {
-  return dist(lms[4], lms[8]) < dist(lms[3], lms[8]);
-}
-
-/** True if two fingertips are touching (within threshold). */
-function touching(lms: Landmarks, a: number, b: number, thresh = 0.06): boolean {
-  return dist(lms[a], lms[b]) < thresh;
-}
-
-/** True if two fingertips are spread apart (not touching). */
-function spread(lms: Landmarks, a: number, b: number, thresh = 0.04): boolean {
-  return Math.abs(lms[a].x - lms[b].x) > thresh;
+function up(lms: Landmarks, tip: number, pip: number): boolean {
+  return (lms[pip].y - lms[tip].y) / palmWidth(lms) > 0.35;
 }
 
 /**
- * True if fingers are crossed (tip of a is past tip of b laterally).
- * Used for R detection.
+ * Thumb is abducted (sticking out to the side, away from palm).
+ * Measured as lateral (x-axis) distance of thumb tip from index MCP, normalized.
+ * L, G, Q, Y, 3, 5 all have abducted thumb.
  */
-function crossed(lms: Landmarks, a: number, b: number): boolean {
-  return Math.abs(lms[a].x - lms[b].x) < 0.025;
+function thumbAbducted(lms: Landmarks): boolean {
+  const pw = palmWidth(lms);
+  const lateral = Math.abs(lms[4].x - lms[5].x) / pw;
+  return lateral > 0.6;
 }
 
-/** Normalized "curl" score for a finger: 0 = fully extended, 1 = fully curled. */
-function curlScore(lms: Landmarks, mcp: number, pip: number, tip: number): number {
-  const fullExt = dist(lms[mcp], { x: lms[mcp].x, y: lms[mcp].y - 0.2, z: 0 });
-  const actual  = dist(lms[mcp], lms[tip]);
-  return 1 - Math.min(actual / (dist(lms[mcp], lms[pip]) * 2), 1);
+/**
+ * Thumb is pointing upward — tip is significantly above wrist AND above index MCP.
+ * Used to detect 10 (thumbs-up) vs A/S/E (fist shapes).
+ */
+function thumbUp(lms: Landmarks): boolean {
+  const pw = palmWidth(lms);
+  // Thumb tip must be above index MCP by >0.3 palm widths
+  return (lms[5].y - lms[4].y) / pw > 0.3;
 }
 
-// ── Finger extension array ────────────────────────────────────────────────────
-
-/** Returns [index, middle, ring, pinky] extension booleans. */
-function fingers(lms: Landmarks): [boolean, boolean, boolean, boolean] {
-  return [
-    extended(lms, 8,  6),
-    extended(lms, 12, 10),
-    extended(lms, 16, 14),
-    extended(lms, 20, 18),
-  ];
+/** Two landmarks are "near" each other (touching/pinching). */
+function near(lms: Landmarks, a: number, b: number, thresh = 0.35): boolean {
+  return dist(lms[a], lms[b]) / palmWidth(lms) < thresh;
 }
 
-// ── Motion detection (module-level history) ───────────────────────────────────
+/** Tip is curled — tip is NOT significantly above its DIP joint. */
+function curled(lms: Landmarks, tip: number, dip: number): boolean {
+  return (lms[dip].y - lms[tip].y) / palmWidth(lms) < 0.15;
+}
 
-const HIST_SIZE = 20;
-let _history: Landmarks[] = [];
+/** Two fingertips are close together on the x-axis. */
+function together(lms: Landmarks, a: number, b: number, thresh = 0.22): boolean {
+  return Math.abs(lms[a].x - lms[b].x) / palmWidth(lms) < thresh;
+}
+
+/** Two fingertips are spread apart on the x-axis. */
+function spreadApart(lms: Landmarks, a: number, b: number, thresh = 0.28): boolean {
+  return Math.abs(lms[a].x - lms[b].x) / palmWidth(lms) > thresh;
+}
+
+// ─── Convenience finger-extension aliases ────────────────────────────────────
+
+const I  = (lms: Landmarks) => up(lms, 8, 6);    // index extended
+const M  = (lms: Landmarks) => up(lms, 12, 10);   // middle extended
+const R  = (lms: Landmarks) => up(lms, 16, 14);   // ring extended
+const P  = (lms: Landmarks) => up(lms, 20, 18);   // pinky extended
+const TH = (lms: Landmarks) => thumbAbducted(lms);
+
+// ─── Motion history ──────────────────────────────────────────────────────────
+
+const HIST = 30;
+let _hist: Landmarks[] = [];
 
 export function pushHistory(lms: Landmarks) {
-  _history.push(JSON.parse(JSON.stringify(lms)));
-  if (_history.length > HIST_SIZE) _history.shift();
+  _hist.push(lms.map(l => ({ ...l })));
+  if (_hist.length > HIST) _hist.shift();
 }
+export function clearHistory() { _hist = []; }
 
-export function clearHistory() { _history = []; }
-
-interface Motion { dx: number; dy: number; speed: number; }
-
-function recentMotion(tipIdx: number): Motion {
-  if (_history.length < 6) return { dx: 0, dy: 0, speed: 0 };
-  const oldest = _history[0][tipIdx];
-  const newest = _history[_history.length - 1][tipIdx];
-  const dx = newest.x - oldest.x;
-  const dy = newest.y - oldest.y;
-  return { dx, dy, speed: Math.sqrt(dx * dx + dy * dy) };
+/** Net motion of a single landmark tip over the history buffer. */
+function tipMotion(tipIdx: number) {
+  if (_hist.length < 8) return { dx: 0, dy: 0, mag: 0 };
+  const pw = palmWidth(_hist[0]);
+  const a = _hist[0][tipIdx], b = _hist[_hist.length - 1][tipIdx];
+  const dx = (b.x - a.x) / pw;
+  const dy = (b.y - a.y) / pw;
+  return { dx, dy, mag: Math.sqrt(dx * dx + dy * dy) };
 }
 
 /**
- * Detect a J-shape: pinky traces upward then curves down-right.
- * We look for upward then lateral motion in the pinky tip.
+ * Detect J: pinky traces upward then hooks to the side.
+ * Per Lifeprint: I-handshape (pinky up), draw a J in the air — up then hook right.
  */
 function detectJ(): boolean {
-  if (_history.length < 12) return false;
-  const mid   = Math.floor(_history.length / 2);
-  const early = _history[0][20];
-  const midPt = _history[mid][20];
-  const late  = _history[_history.length - 1][20];
-  // Phase 1: moved up, Phase 2: curved (x changed)
-  const wentUp   = midPt.y < early.y - 0.05;
-  const curved   = Math.abs(late.x - midPt.x) > 0.04;
-  return wentUp && curved;
+  if (_hist.length < 16) return false;
+  const n = _hist.length;
+  const pw = palmWidth(_hist[0]);
+  // Pinky tip (idx 20): moved upward significantly in first half
+  const early = _hist[0][20];
+  const mid   = _hist[Math.floor(n * 0.5)][20];
+  const late  = _hist[n - 1][20];
+  const wentUp   = (mid.y - early.y) / pw < -0.35;   // moved up
+  const hookedX  = Math.abs(late.x - mid.x) / pw > 0.25; // then moved sideways (the hook)
+  return wentUp && hookedX;
 }
 
 /**
- * Detect a Z-shape: index traces Z pattern (right, diagonal, right).
+ * Detect Z: index finger traces a Z — right, diagonal down-left, right.
+ * Simplified: net rightward + downward movement over the buffer.
+ * Per Lifeprint: one-handshape index draws a Z in front of body.
  */
 function detectZ(): boolean {
-  if (_history.length < 12) return false;
-  const n = _history.length;
-  const q1 = _history[0][8];
-  const q4 = _history[n - 1][8];
-  // Net rightward + downward movement
-  const movedRight = q4.x - q1.x > 0.07;
-  const movedDown  = q4.y - q1.y > 0.02;
+  if (_hist.length < 16) return false;
+  const n = _hist.length;
+  const pw = palmWidth(_hist[0]);
+  const a = _hist[0][8], b = _hist[n - 1][8];
+  const movedRight = (b.x - a.x) / pw > 0.45;
+  const movedDown  = (b.y - a.y) / pw > 0.08;
   return movedRight && movedDown;
 }
 
-// ── Main classifier ───────────────────────────────────────────────────────────
+/**
+ * Detect YES: S-handshape (fist) nods up and down at the wrist.
+ * Per Lifeprint: make an S, bend wrist up/down repeatedly.
+ */
+function detectNod(): boolean {
+  if (_hist.length < 12) return false;
+  const ys = _hist.map(f => f[0].y);  // wrist y
+  const mn = Math.min(...ys), mx = Math.max(...ys);
+  return (mx - mn) / palmWidth(_hist[0]) > 0.22;
+}
+
+// ─── Main classifier ─────────────────────────────────────────────────────────
 
 export function classifySign(lms: Landmarks): string | null {
   if (!lms || lms.length < 21) return null;
-
   pushHistory(lms);
 
-  const [idx, mid, rng, pky] = fingers(lms);
-  const tOut    = thumbOut(lms);
-  const tCurl   = thumbCurled(lms);
-  const allCurl = !idx && !mid && !rng && !pky;
-  const allOpen = idx && mid && rng && pky;
+  const i = I(lms), m = M(lms), r = R(lms), p = P(lms), th = TH(lms);
+  const none = !i && !m && !r && !p;
+  const all  =  i &&  m &&  r &&  p;
 
-  // ── Alphabet (static) ─────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // NUMBERS 0–10  — checked FIRST to prevent conflicts with alphabet
+  // (1 vs L, 2 vs V, 4 vs B, 9 vs F, 0 vs O)
+  // Source: Lifeprint.com Numbers lesson
+  // ══════════════════════════════════════════════════════════════════════════
 
-  // A — fist, thumb alongside (NOT out, NOT curled over)
-  if (allCurl && !tOut && !tCurl) return "A";
+  // 0: O-shape — all fingertips gathered near thumb tip
+  //    All fingers curl to meet thumb; palm faces forward.
+  if (none && near(lms, 8, 4, 0.42) && near(lms, 12, 4, 0.45) && near(lms, 16, 4, 0.52)) return "0";
 
-  // S — fist, thumb curled OVER fingers
-  if (allCurl && tCurl) return "S";
-
-  // E — fingers curled DOWN (tips near palm), thumb tucked under
-  if (!idx && !mid && !rng && !pky) {
-    const tips = [8, 12, 16, 20].map(i => lms[i].y);
-    const pip  = [6, 10, 14, 18].map(i => lms[i].y);
-    const allTipsNearPip = tips.every((t, i) => t > pip[i] - 0.04);
-    if (allTipsNearPip) return "E";
-    return "A"; // default fist = A
+  // 1: Index ONLY up, thumb tucked (NOT abducted — that would be L)
+  //    Per Lifeprint: "Just point your index finger up with thumb folded"
+  if (i && !m && !r && !p && !th) {
+    // Don't return 1 if Z motion detected (Z uses same handshape + motion)
+    if (!detectZ()) return "1";
   }
 
-  // B — 4 fingers straight up, thumb folded across palm (not out)
-  if (idx && mid && rng && pky && !tOut) return "B";
+  // 2: Index + middle up and SPREAD APART (same handshape as V)
+  //    Per Lifeprint: "Index and middle fingers spread in a V"
+  if (i && m && !r && !p && spreadApart(lms, 8, 12)) return "2";
 
-  // 5 / open hand — all 4 fingers up, thumb out
-  if (allOpen && tOut) return "5";
+  // 3: Thumb + index + middle — thumb abducted outward
+  //    Per Lifeprint: "Thumb, index, and middle extended; ring and pinky folded"
+  if (i && m && !r && !p && th) return "3";
 
-  // 4 — 4 fingers up, thumb not out (same as B basically — context matters)
-  // We'll return B here; diagnostic should not test both simultaneously
+  // 4: All FOUR fingers up, thumb folded across palm (NOT abducted)
+  //    Per Lifeprint: "All four fingers up, thumb tucked"
+  if (all && !th) return "4";
 
-  // C — curved hand: fingers partially bent, NOT fully extended, NOT fist
-  if (!idx && !mid && !rng && !pky) {
-    const d = dist(lms[4], lms[8]);
-    const palmW = dist(lms[5], lms[17]);
-    if (d > palmW * 0.4 && d < palmW * 1.0) return "C";
+  // 5: Open hand — all fingers + thumb spread out
+  //    Per Lifeprint: "Open relaxed hand, all five fingers spread"
+  if (all && th) return "5";
+
+  // 6: PINKY touches thumb tip, index+middle+ring extended
+  //    Per Lifeprint: "Pinky and thumb tips touch, other three fingers point up"
+  if (i && m && r && !p && near(lms, 20, 4, 0.45)) return "6";
+
+  // 7: RING finger touches thumb tip, index+middle+pinky up
+  //    Per Lifeprint: "Ring and thumb tips touch"
+  if (i && m && !r && p && near(lms, 16, 4, 0.45)) return "7";
+
+  // 8: MIDDLE finger touches thumb tip, index+ring+pinky up
+  //    Per Lifeprint: "Middle and thumb tips touch"
+  if (i && !m && r && p && near(lms, 12, 4, 0.45)) return "8";
+  // Also when index is ambiguous
+  if (!i && !m && r && p && near(lms, 12, 4, 0.5)) return "8";
+
+  // 9: INDEX tip touches thumb (OK/loop), middle+ring+pinky up or curled
+  //    Per Lifeprint: "Index and thumb form a circle — like letter F"
+  if (!i && m && r && p && near(lms, 8, 4, 0.35)) return "9";
+
+  // 10: THUMBS UP — all four fingers in fist, thumb pointing straight up
+  //     Per Lifeprint: "A-handshape with thumb extended upward (thumbs up), shake"
+  //     Key: thumb UP above index MCP distinguishes from A/S (where thumb is beside or over fist)
+  if (none && thumbUp(lms)) return "10";
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ALPHABET A–Z
+  // Source: Lifeprint.com ASL Alphabet lessons
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── Closed fist shapes (none extended) ───────────────────────────────────
+
+  if (none) {
+    // S: Fist, thumb wraps OVER the front of curled fingers
+    //    Thumb is close to index+middle fingertips (in front of them)
+    if (near(lms, 4, 8, 0.32) && lms[4].x > lms[8].x - 0.05) return "S";
+
+    // E: Fingers curled forward (bent at MCP and PIP), thumb tucked UNDER
+    //    Fingertips roughly at mid-palm height; distinctive bent-finger look
+    const tipsCurled = [8, 12, 16, 20].filter(t => curled(lms, t, t - 1)).length >= 3;
+    if (tipsCurled && !thumbUp(lms)) return "E";
+
+    // A: Fist, thumb rests ALONGSIDE (not over, not up)
+    //    This is the default closed fist when thumb is beside the fingers
+    if (!thumbUp(lms) && !th) return "A";
+
+    // T: Thumb between index and middle (but looks like fist from front)
+    //    Detected by thumb abduction check failing + thumb tucked
+    return "A"; // default closed fist → A
   }
 
-  // O / 0 — fingertips and thumb meet in a circle
-  if (!idx && !mid && !rng && !pky) {
-    const tipToThumb = [8, 12, 16, 20].map(i => dist(lms[i], lms[4]));
-    const allClose = tipToThumb.every(d => d < 0.12);
-    if (allClose) return "O"; // same shape for 0 and O
-  }
+  // ── One finger ───────────────────────────────────────────────────────────
 
-  // D — index up, thumb and middle form circle (others curled)
-  if (idx && !mid && !rng && !pky) {
-    if (touching(lms, 4, 12) || touching(lms, 4, 11)) return "D";
-  }
-
-  // F — index + thumb circle, middle/ring/pinky up
-  if (!idx && mid && rng && pky) {
-    if (touching(lms, 4, 8) || touching(lms, 4, 7)) return "F";
-    // 9: similar — index-thumb circle with others more spread
-    return "F";
-  }
-
-  // G — index + thumb point horizontally (sideways)
-  if (idx && !mid && !rng && !pky && tOut) {
-    const indexHoriz = Math.abs(lms[8].x - lms[5].x) > Math.abs(lms[8].y - lms[5].y);
-    if (indexHoriz) return "G";
-    // Else: index up + thumb out = L
-    return "L";
-  }
-
-  // L — index up, thumb out, others curled
-  if (idx && !mid && !rng && !pky && tOut) return "L";
-
-  // 1 — index up, thumb NOT out (tucked near palm), others curled
-  if (idx && !mid && !rng && !pky && !tOut) return "1";
-
-  // H — index + middle extended HORIZONTALLY together
-  if (idx && mid && !rng && !pky && !tOut) {
-    const horizontal = Math.abs(lms[8].x - lms[5].x) > 0.04;
-    if (horizontal) return "H";
-  }
-
-  // I / pinky only
-  if (!idx && !mid && !rng && pky && !tOut) return "I";
-
-  // Y — pinky + thumb out
-  if (!idx && !mid && !rng && pky && tOut) return "Y";
-
-  // K — index + middle up, thumb between them (not spread)
-  if (idx && mid && !rng && !pky) {
-    const thumbBetween = lms[4].x > Math.min(lms[8].x, lms[12].x) &&
-                         lms[4].x < Math.max(lms[8].x, lms[12].x);
-    if (thumbBetween) return "K";
-  }
-
-  // U — index + middle up together (not spread), NO thumb
-  if (idx && mid && !rng && !pky && !tOut) {
-    if (!spread(lms, 8, 12)) return "U";
-    // V — index + middle up and spread
-    if (spread(lms, 8, 12)) return "V";
-  }
-
-  // 2 / V — same shape (context resolves)
-  if (idx && mid && !rng && !pky) {
-    if (spread(lms, 8, 12, 0.03)) return "V"; // also "2"
-    if (crossed(lms, 8, 12))      return "R";
-    return "U";
-  }
-
-  // W — 3 fingers up (index, middle, ring), spread
-  if (idx && mid && rng && !pky && !tOut) return "W";
-
-  // 6 — pinky + thumb touch, index/middle/ring up
-  if (idx && mid && rng && !pky && tOut) {
-    if (touching(lms, 4, 20)) return "6";
-  }
-
-  // 3 — thumb + index + middle out
-  if (idx && mid && !rng && !pky && tOut) return "3";
-
-  // 7 — ring + thumb touch
-  if (idx && mid && !rng && pky) return "7"; // approx
-
-  // 8 — middle + thumb touch
-  if (idx && !mid && rng && pky) return "8"; // approx
-
-  // X — index hooked
-  if (!allCurl && !idx && !mid && !rng && !pky) {
-    const hook = lms[8].y > lms[6].y - 0.01 && lms[7].y < lms[6].y;
-    if (hook) return "X";
-  }
-
-  // P — like K but pointing down
-  if (idx && mid && !rng && !pky) {
-    const pointDown = lms[8].y > lms[0].y; // tips below wrist
-    if (pointDown) return "P";
-  }
-
-  // M — three fingers folded over thumb
-  if (!idx && !mid && !rng && pky) {
-    if (tCurl) return "M";
-  }
-
-  // N — two fingers over thumb
-  if (!idx && !mid && rng && pky) {
-    if (tCurl) return "N";
-  }
-
-  // T — thumb between index and middle
-  if (!idx && !mid && !rng && !pky && tOut) {
-    if (lms[4].y < lms[6].y) return "T";
-  }
-
-  // 10 — thumbs up (thumb extended up, fingers in fist)
-  if (!idx && !mid && !rng && !pky && !tOut) {
-    const thumbUp = lms[4].y < lms[3].y - 0.04;
-    if (thumbUp) return "10";
-  }
-
-  // ── Motion signs ──────────────────────────────────────────────────────────
-
-  // J — pinky up + J motion
-  if (!idx && !mid && !rng && pky && !tOut) {
-    if (detectJ()) return "J";
-    return "I"; // static I if no motion
-  }
-
-  // Z — index up + Z motion
-  if (idx && !mid && !rng && !pky && !tOut) {
+  // Index only
+  if (i && !m && !r && !p) {
+    if (th) {
+      // G: index + thumb horizontal (pointing to the side)
+      //    Per Lifeprint: "Like pointing a gun sideways"
+      const indexHoriz = Math.abs(lms[8].x - lms[5].x) > Math.abs(lms[8].y - lms[5].y);
+      if (indexHoriz) return "G";
+      // L: index up, thumb out — classic L shape
+      return "L";
+    }
+    // X: index hooked/bent (tip curled)
+    if (curled(lms, 8, 7)) return "X";
+    // D: index up, thumb + middle form circle touching
+    if (near(lms, 4, 12, 0.4)) return "D";
+    // 1 with Z motion = Z
     if (detectZ()) return "Z";
-    return "1"; // static 1 if no motion
+    // Default: index up, thumb tucked = 1
+    return "1";
   }
 
-  // ── Common gesture signs ──────────────────────────────────────────────────
-
-  // HELLO — flat hand near forehead (open hand, wrist high)
-  if (allOpen && tOut) {
-    const wristHigh = lms[0].y < 0.45;
-    if (wristHigh) return "HELLO";
-    return "5";
+  // Pinky only
+  if (!i && !m && !r && p) {
+    if (th) return "Y"; // pinky + thumb = Y (shaka)
+    // J: pinky + upward hook motion; I: pinky static
+    if (detectJ()) return "J";
+    return "I";
   }
 
-  // YES — fist nodding (A shape with vertical motion)
-  if (allCurl && !tOut) {
-    const motion = recentMotion(0); // wrist
-    if (motion.dy > 0.06 && motion.speed > 0.06) return "YES";
-    return "A";
+  // ── Two fingers ───────────────────────────────────────────────────────────
+
+  if (i && m && !r && !p) {
+    if (th) return "3"; // already returned above but safety fallback
+
+    // K: index + middle up, thumb UP between them
+    //    Per Lifeprint: "Thumb tip touches underside of middle finger, index+middle spread"
+    const thumbBetween = lms[4].x > Math.min(lms[8].x, lms[12].x) - 0.02 &&
+                         lms[4].x < Math.max(lms[8].x, lms[12].x) + 0.02 &&
+                         lms[4].y < lms[9].y; // thumb above middle MCP
+    if (thumbBetween) return "K";
+
+    if (together(lms, 8, 12)) {
+      // H: index + middle together, pointing sideways
+      const horizontal = Math.abs(lms[8].x - lms[6].x) > Math.abs(lms[8].y - lms[6].y);
+      if (horizontal) return "H";
+      // R: crossed fingers (index and middle cross each other)
+      const crossed = Math.abs(lms[8].x - lms[12].x) / palmWidth(lms) < 0.12;
+      if (crossed) return "R";
+      return "U"; // two fingers together, vertical = U
+    }
+
+    // V: spread apart (already handled in numbers as 2, but for alphabet context)
+    if (spreadApart(lms, 8, 12)) return "V";
+
+    return "U"; // default two-finger
   }
 
-  // NO — index + middle snap closed (hard to detect; approximate with 2 fingers)
-
-  // THANK_YOU / PLEASE — open hand moving from face (motion)
-  if (allOpen) {
-    const motion = recentMotion(0);
-    if (motion.dy > 0.04) return "THANK_YOU";
+  // Ring + pinky only (index + middle down)
+  if (!i && !m && r && p) {
+    // N: index + middle curl over thumb; ring + pinky up approximation
+    return "N";
   }
 
-  // MORE — flat O hands tapping (just detect O shape)
-  // STOP — chop motion
+  // Index + pinky (middle + ring down) — devil horns, not standard ASL letter
+
+  // Pinky + middle only
+  if (!i && m && !r && p) {
+    return "M"; // approximate — M has 3 fingers over thumb
+  }
+
+  // ── Three fingers ─────────────────────────────────────────────────────────
+
+  if (i && m && r && !p) {
+    if (th) return "6"; // safety fallback (handled above with near check)
+    // W: index + middle + ring spread, no thumb
+    return "W";
+  }
+
+  if (!i && m && r && p) {
+    // F: index + thumb form circle, middle+ring+pinky extended
+    if (near(lms, 4, 8, 0.38)) return "F";
+    return "M"; // approximate
+  }
+
+  // ── Four fingers ─────────────────────────────────────────────────────────
+
+  if (all) {
+    if (th) {
+      // HELLO: open hand near forehead level
+      if (lms[0].y < 0.42) return "HELLO";
+      return "5";
+    }
+    // B: all four together, flat
+    if (together(lms, 8, 12) && together(lms, 12, 16)) return "B";
+    return "4";
+  }
+
+  // ── Gesture signs ─────────────────────────────────────────────────────────
+
+  // YES: fist nodding (none + nod motion)
+  if (none && detectNod()) return "YES";
 
   return null;
 }
 
 /**
- * Match detected sign to the expected sign.
- * Handles aliases (e.g. 2=V, 0=O, 9=F).
+ * Match a detected sign to the expected lesson sign.
+ * Handles ASL signs that share the same handshape (aliases).
+ * Source: Lifeprint.com sign equivalences
  */
 export function matchSignToLesson(detected: string | null, expected: string): boolean {
   if (!detected) return false;
@@ -356,33 +356,49 @@ export function matchSignToLesson(detected: string | null, expected: string): bo
   const e = expected.toUpperCase();
   if (d === e) return true;
 
-  // Alias map — signs that are visually identical or nearly so
+  // Visually identical handshape pairs (per ASL University)
   const ALIASES: Record<string, string[]> = {
-    "0":        ["O"],
-    "O":        ["0"],
-    "1":        ["Z"],   // Z without motion = 1
-    "2":        ["V"],
-    "V":        ["2"],
-    "5":        ["HELLO", "THANK_YOU"],
-    "HELLO":    ["5"],
-    "A":        ["S", "E", "YES"],
-    "S":        ["A"],
-    "I":        ["J"],   // J without motion = I
-    "J":        ["I"],
-    "Z":        ["1"],
-    "9":        ["F"],
-    "F":        ["9"],
-    "B":        ["4"],
-    "4":        ["B"],
+    // Numbers ↔ letters with same handshape
+    "0":  ["O"],
+    "O":  ["0"],
+    "1":  [],             // 1 and L are DIFFERENT (thumb in vs out) — no alias
+    "2":  ["V"],
+    "V":  ["2"],
+    "4":  ["B"],          // B has fingers together; 4 has them slightly spread
+    "B":  ["4"],
+    "9":  ["F"],
+    "F":  ["9"],
+    // Motion sign base shapes
+    "I":  ["J"],          // J without motion = I
+    "J":  ["I"],
+    "Z":  ["1"],          // Z without motion = 1
+    "1":  ["Z"],
+    // Similar fist shapes
+    "A":  ["S"],
+    "S":  ["A", "E"],
+    "E":  ["A"],
+    // Similar two-finger shapes
+    "U":  ["H"],
+    "H":  ["U"],
+    // Gesture ↔ handshape
+    "YES":   ["A", "S"],
+    "HELLO": ["5"],
+    "5":     ["HELLO"],
   };
 
   return ALIASES[e]?.includes(d) ?? false;
 }
 
-/** Whether a sign ID requires motion to distinguish from a similar static sign. */
+/** Whether a sign requires motion to perform correctly. */
 export function requiresMotion(signId: string): boolean {
-  return ["J", "Z", "YES", "NO", "MORE", "STOP", "HELLO", "GOODBYE",
-          "THANK_YOU", "PLEASE", "HOW_ARE_YOU", "NICE_TO_MEET", "MY_NAME",
-          "WHAT", "WHERE", "WHO", "WHY", "MOTHER", "FATHER", "BROTHER",
-          "SISTER", "HELP"].includes(signId.toUpperCase());
+  const MOTION_SIGNS = new Set([
+    "J","Z",
+    "YES","NO","MORE","STOP","HELP","PLEASE","THANK_YOU",
+    "HELLO","GOODBYE","HOW_ARE_YOU","NICE_TO_MEET","MY_NAME",
+    "WHAT","WHERE","WHO","WHY",
+    "MOTHER","FATHER","BROTHER","SISTER",
+    "GOOD","GOOD_MORNING","GOOD_NIGHT",
+    "SORRY","EXCUSE_ME","YOU_WELCOME",
+  ]);
+  return MOTION_SIGNS.has(signId.toUpperCase());
 }
