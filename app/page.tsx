@@ -5,14 +5,14 @@ import { useSession, signIn } from "next-auth/react";
 const FEATURES = [
   { icon: "📷", color: "var(--mod-emerald-bg)", title: "Camera-Based Practice", desc: "Your webcam detects hand landmarks in real time using MediaPipe — no app install needed." },
   { icon: "📚", color: "var(--mod-sky-bg)",     title: "Structured Modules",   desc: "Progress through alphabet, numbers, greetings, common words, and full phrases step by step." },
-  { icon: "🎯", color: "var(--mod-amber-bg)",   title: "Diagnostic Test",      desc: "Already know some signs? Take a quick test and jump straight to the right level." },
-  { icon: "☁️", color: "var(--mod-violet-bg)",  title: "Progress Saved",       desc: "Sign in with Google and your progress syncs across every device automatically." },
+  { icon: "🏆", color: "var(--mod-amber-bg)",   title: "Track Progress",       desc: "Every lesson you complete is saved. Pick up exactly where you left off, any time." },
+  { icon: "☁️", color: "var(--mod-violet-bg)",  title: "Progress Synced",      desc: "Sign in with Google and your progress syncs across every device automatically." },
 ];
 
 const STEPS = [
-  { n: "1", title: "Pick a lesson",    desc: "Choose a module or let the diagnostic place you." },
-  { n: "2", title: "Learn the sign",   desc: "See a description and helpful tips for each hand shape." },
-  { n: "3", title: "Show the camera",  desc: "Hold the sign — we detect your hand landmarks and confirm it live." },
+  { n: "1", title: "Pick a lesson",   desc: "Choose any module and start from the first lesson." },
+  { n: "2", title: "Learn the sign",  desc: "See a description and helpful tips for each hand shape." },
+  { n: "3", title: "Show the camera", desc: "Hold the sign — we detect your hand landmarks and confirm it live." },
 ];
 
 export default function Home() {
@@ -35,23 +35,18 @@ export default function Home() {
         </h1>
         <p style={{ color: "var(--text-muted)", fontSize: "var(--text-lg)", maxWidth: "40rem", margin: "20px auto 40px", lineHeight: 1.6 }}>
           Practice American Sign Language with instant computer-vision feedback.
-          Start from scratch or take a diagnostic to find your level.
+          Work through structured modules at your own pace.
         </p>
         <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}>
-          <Link href="/learn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "18px", color: "var(--text-on-accent)", background: "var(--accent)", padding: "15px 32px", borderRadius: "var(--radius-pill)", boxShadow: "var(--shadow-accent)", textDecoration: "none", transition: "opacity var(--dur-fast)" }}>
-            Start from Beginning
+          <Link href="/learn" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "18px", color: "var(--text-on-accent)", background: "var(--accent)", padding: "15px 32px", borderRadius: "var(--radius-pill)", boxShadow: "var(--shadow-accent)", textDecoration: "none" }}>
+            Start Learning →
           </Link>
-          <Link href="/diagnostic" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "18px", color: "var(--text-primary)", background: "var(--white)", padding: "15px 32px", borderRadius: "var(--radius-pill)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-sm)", textDecoration: "none" }}>
-            🎯 Take Diagnostic Test
-          </Link>
+          {!session && (
+            <button onClick={() => signIn("google")} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px", fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "18px", color: "var(--text-primary)", background: "var(--white)", padding: "15px 32px", borderRadius: "var(--radius-pill)", border: "1px solid var(--border-strong)", boxShadow: "var(--shadow-sm)", cursor: "pointer" }}>
+              <GoogleG size={20} /> Sign in to Save Progress
+            </button>
+          )}
         </div>
-        {!session && (
-          <p style={{ marginTop: "20px", fontSize: "var(--text-sm)", color: "var(--text-faint)" }}>
-            <button onClick={() => signIn("google")} style={{ color: "var(--accent-text)", fontWeight: "var(--fw-medium)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "2px" }}>
-              Sign in with Google
-            </button>{" "}to save your progress
-          </p>
-        )}
       </section>
 
       {/* Feature cards */}
@@ -83,11 +78,17 @@ export default function Home() {
           </div>
           <div style={{ marginTop: "48px" }}>
             <Link href="/learn" style={{ display: "inline-flex", alignItems: "center", fontFamily: "var(--font-display)", fontWeight: "var(--fw-extrabold)", fontSize: "18px", color: "var(--text-on-accent)", background: "var(--accent)", padding: "15px 36px", borderRadius: "var(--radius-pill)", boxShadow: "var(--shadow-accent)", textDecoration: "none" }}>
-              Get Started Free →
+              Browse Modules →
             </Link>
           </div>
         </div>
       </section>
     </div>
+  );
+}
+
+function GoogleG({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
   );
 }

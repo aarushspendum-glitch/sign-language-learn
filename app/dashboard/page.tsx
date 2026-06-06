@@ -5,7 +5,6 @@ import Link from "next/link";
 import { MODULES } from "@/lib/curriculum";
 
 interface P { moduleId: string; lessonId: string; completed: boolean; score: number | null; }
-interface DR { score: number; level: string; moduleStart: string; }
 
 const HUE: Record<string, { fg: string; bg: string }> = {
   emerald: { fg: "var(--mod-emerald)", bg: "var(--mod-emerald-bg)" },
@@ -18,13 +17,11 @@ const HUE: Record<string, { fg: string; bg: string }> = {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const [progress, setProgress] = useState<P[]>([]);
-  const [diag, setDiag] = useState<DR | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!session) return;
-    Promise.all([fetch("/api/progress").then(r=>r.json()), fetch("/api/diagnostic").then(r=>r.json())])
-      .then(([p,d]) => { setProgress(p); setDiag(d); setLoading(false); });
+    fetch("/api/progress").then(r => r.json()).then(p => { setProgress(p); setLoading(false); });
   }, [session]);
 
   if (status === "loading") return <Skeleton />;
@@ -39,15 +36,15 @@ export default function DashboardPage() {
 
   const doneIn = (id: string) => progress.filter(p => p.moduleId === id && p.completed).length;
   const totalDone = progress.filter(p => p.completed).length;
-  const totalLessons = MODULES.reduce((a,m) => a+m.lessons.length, 0);
-  const overall = Math.round((totalDone/totalLessons)*100);
+  const totalLessons = MODULES.reduce((a, m) => a + m.lessons.length, 0);
+  const overall = Math.round((totalDone / totalLessons) * 100);
   const started = MODULES.filter(m => doneIn(m.id) > 0).length;
 
   const STATS = [
-    { value: totalDone, label: "Lessons Done", accent: true },
-    { value: `${overall}%`, label: "Overall Progress", accent: true },
-    { value: started, label: "Modules Started", accent: true },
-    { value: diag ? `${diag.score}%` : "—", label: "Diagnostic Score", accent: !!diag },
+    { value: totalDone,   label: "Lessons Done" },
+    { value: `${overall}%`, label: "Overall Progress" },
+    { value: started,     label: "Modules Started" },
+    { value: `${MODULES.length - started}`, label: "Modules Remaining" },
   ];
 
   return (
@@ -65,24 +62,11 @@ export default function DashboardPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "16px", marginBottom: "40px" }}>
         {STATS.map((s, i) => (
           <div key={s.label} className="sl-rise" style={{ animationDelay: `${i*0.07}s`, background: "var(--surface-card)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", padding: "20px", textAlign: "center", boxShadow: "var(--shadow-sm)" }}>
-            <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", fontWeight: "var(--fw-black)", color: s.accent ? "var(--accent-text)" : "var(--text-primary)", margin: 0, lineHeight: 1.1 }}>{s.value}</p>
+            <p style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h2)", fontWeight: "var(--fw-black)", color: "var(--accent-text)", margin: 0, lineHeight: 1.1 }}>{s.value}</p>
             <p style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", margin: "4px 0 0" }}>{s.label}</p>
           </div>
         ))}
       </div>
-
-      {/* Diagnostic CTA */}
-      {!diag && (
-        <div style={{ background: "var(--warn-soft)", border: "1px solid var(--amber-100)", borderRadius: "var(--radius-lg)", padding: "20px", marginBottom: "32px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-          <div>
-            <p style={{ margin: 0, fontWeight: "var(--fw-semibold)", color: "var(--warn-text)", fontFamily: "var(--font-sans)" }}>Haven't taken the diagnostic yet?</p>
-            <p style={{ margin: "2px 0 0", color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>Find your level and jump to the right module.</p>
-          </div>
-          <Link href="/diagnostic" style={{ fontFamily: "var(--font-display)", fontWeight: "var(--fw-bold)", fontSize: "var(--text-sm)", color: "var(--slate-900)", background: "var(--warn)", padding: "10px 20px", borderRadius: "var(--radius-md)", textDecoration: "none", whiteSpace: "nowrap" }}>
-            Take Diagnostic →
-          </Link>
-        </div>
-      )}
 
       {/* Module grid */}
       <h2 style={{ fontFamily: "var(--font-display)", fontSize: "var(--text-h3)", fontWeight: "var(--fw-bold)", color: "var(--text-primary)", margin: "0 0 20px" }}>Module Progress</h2>
@@ -90,7 +74,7 @@ export default function DashboardPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: "24px" }}>
           {MODULES.map((mod, i) => {
             const done = doneIn(mod.id);
-            const pct = Math.round((done/mod.lessons.length)*100);
+            const pct = Math.round((done / mod.lessons.length) * 100);
             const hue = HUE[mod.accent] ?? HUE.emerald;
             return (
               <div key={mod.id} className="sl-rise" style={{ animationDelay: `${i*0.05}s`, background: "var(--surface-card)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-lg)", padding: "20px", boxShadow: "var(--shadow-sm)" }}>
