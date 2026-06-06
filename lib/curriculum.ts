@@ -488,15 +488,28 @@ export function getLesson(moduleId: string, lessonId: string): Lesson | undefine
   return getModule(moduleId)?.lessons.find((l) => l.id === lessonId);
 }
 
+/**
+ * Diagnostic signs — hand-picked static signs that are clearly distinguishable
+ * from one another by the classifier. Covers alphabet, numbers, and gestures.
+ * Motion signs (J, Z, YES, etc.) are excluded because they need temporal data.
+ */
+export const DIAGNOSTIC_SIGNS: Sign[] = [
+  // Alphabet samples — each has a unique hand shape
+  { id: "A", label: "A", description: "Fist with thumb resting on the side", tips: ["Curl all fingers into a fist", "Thumb rests alongside — not over the fingers, not sticking out"] },
+  { id: "B", label: "B", description: "Four fingers straight up, thumb folded across palm", tips: ["Keep all four fingers together and straight", "Thumb folds flat across the palm"] },
+  { id: "C", label: "C", description: "Hand curved into a C shape", tips: ["Imagine holding a tennis ball", "Both thumb and fingers curve toward each other"] },
+  { id: "L", label: "L", description: "Index finger points up, thumb points out — classic L shape", tips: ["Only index finger up", "Thumb extends OUT to the side — this is what separates L from the number 1"] },
+  { id: "O", label: "O", description: "All fingertips meet the thumb forming an O", tips: ["All five fingers curve to meet the thumb", "Same shape as the number 0"] },
+  { id: "V", label: "V", description: "Index and middle fingers up and spread in a V / peace sign", tips: ["Spread your index and middle fingers wide", "Same shape as the number 2"] },
+  { id: "Y", label: "Y", description: "Thumb and pinky extended outward — the 'hang loose' / shaka sign", tips: ["Only thumb and pinky stick out", "Middle three fingers are curled in"] },
+  // Numbers — clearly distinct from the letters above
+  { id: "1", label: "1", description: "Only index finger points up — thumb stays tucked in (NOT like L)", tips: ["Index finger up only", "Keep your thumb folded AGAINST your palm — if your thumb sticks out sideways that's an L, not a 1"] },
+  { id: "5", label: "5", description: "Open palm, all five fingers spread wide", tips: ["Fully open your hand", "Spread fingers as wide as comfortable"] },
+  { id: "10", label: "10", description: "Make a fist and extend only your thumb upward (thumbs up)", tips: ["All four fingers curl into a fist", "Thumb points straight up — like a thumbs-up"] },
+];
+
 export function getDiagnosticSigns(): Sign[] {
-  const signs: Sign[] = [];
-  // Pull a sample from each module
-  for (const mod of MODULES) {
-    for (const lesson of mod.lessons.slice(0, 1)) {
-      signs.push(...lesson.signs.slice(0, 2));
-    }
-  }
-  return signs.slice(0, 10);
+  return DIAGNOSTIC_SIGNS;
 }
 
 export function getStartingModule(score: number): string {

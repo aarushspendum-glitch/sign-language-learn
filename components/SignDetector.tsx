@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { classifySign, matchSignToLesson, type Landmark } from "@/lib/signClassifier";
+import { classifySign, matchSignToLesson, clearHistory, requiresMotion, type Landmark } from "@/lib/signClassifier";
 
 interface Props {
   expectedSign: string;
@@ -35,9 +35,12 @@ export default function SignDetector({ expectedSign, onSuccess, onDetected, show
     for (const lm of lms) { ctx.beginPath(); ctx.arc(lm.x*w, lm.y*h, 4, 0, Math.PI*2); ctx.fill(); }
   }, []);
 
+  const needsMotion = requiresMotion(expectedSign);
+
   useEffect(() => {
     firedRef.current = false; streakRef.current = 0;
     setStreak(0); setDetectedSign(null); setStatus("loading");
+    clearHistory();
   }, [expectedSign]);
 
   useEffect(() => {
@@ -117,11 +120,26 @@ export default function SignDetector({ expectedSign, onSuccess, onDetected, show
         )}
       </div>
 
+      {/* Motion hint */}
+      {needsMotion && status !== "loading" && (
+        <div style={{ width: "100%", background: "var(--mod-amber-bg)", border: "1px solid var(--amber-100)", borderRadius: "var(--radius-md)", padding: "10px 14px", fontSize: "var(--text-xs)", color: "var(--mod-amber)", fontWeight: "var(--fw-semibold)", display: "flex", alignItems: "center", gap: "6px" }}>
+          <span>✋</span> This sign requires movement — perform the motion slowly in front of the camera
+        </div>
+      )}
+
+      {/* What we're seeing */}
+      {detectedSign && status !== "loading" && (
+        <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "var(--text-xs)", color: "var(--text-faint)" }}>
+          <span>Detected: <strong style={{ color: status === "detected" ? "var(--accent-text)" : "var(--text-muted)" }}>{detectedSign}</strong></span>
+          <span>Expected: <strong style={{ color: "var(--text-secondary)" }}>{expectedSign}</strong></span>
+        </div>
+      )}
+
       {/* Progress bar */}
       {showFeedback && status !== "loading" && (
         <div style={{ width: "100%" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "6px" }}>
-            <span>Hold the sign steady…</span>
+            <span>{needsMotion ? "Perform the motion…" : "Hold the sign steady…"}</span>
             <span style={{ fontWeight: "var(--fw-semibold)", color: "var(--text-secondary)" }}>{pct}%</span>
           </div>
           <div style={{ height: "8px", background: "var(--surface-track)", borderRadius: "var(--radius-pill)", overflow: "hidden" }}>
